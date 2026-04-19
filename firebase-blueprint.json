@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profile",
+      "description": "Stores user onboarding data, preferences, and clinical impact metrics",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "specialty": { "type": "string" },
+        "subTopics": { "type": "array", "items": { "type": "string" } },
+        "goal": { "type": "string" },
+        "experience": { "type": "string" },
+        "country": { "type": "string" },
+        "onboardingCompleted": { "type": "boolean" },
+        "readPaperIds": { "type": "array", "items": { "type": "string" }, "description": "IDs of publication nodes successfully navigated" },
+        "impactScore": { "type": "number", "description": "Calculated score based on clinical contributions and discourse" },
+        "commentCount": { "type": "number" },
+        "shareCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "specialty", "onboardingCompleted"]
+    },
+    "comments": {
+      "title": "Clinical Discourse",
+      "description": "Expert commentary and peer-review insights on specific publications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "paperId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userSpecialty": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "likes": { "type": "number" }
+      },
+      "required": ["id", "paperId", "userId", "content"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "User profile document"
+    },
+    "/papers/{paperId}/comments/{commentId}": {
+      "schema": "comments",
+      "description": "Peer-review discourse for a specific scientific paper"
+    }
+  }
+}

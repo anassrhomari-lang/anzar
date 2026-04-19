@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required) - The Firebase Auth UID
+    //   - name: string (required) - User's full name
+    //   - email: string (required) - User's email address
+    //   - specialty: string (required) - Medical specialty
+    //   - subTopics: list (optional) - List of interested sub-topics
+    //   - goal: string (optional) - User's learning goal
+    //   - experience: string (optional) - Years of experience
+    //   - country: string (optional) - User's country
+    //   - onboardingCompleted: bool (required) - Whether onboarding is finished
+    //   - readPaperIds: list (optional) - IDs of read publications
+    //   - impactScore: number (optional) - Performance metric
+    //   - commentCount: number (optional) - Interaction metric
+    //   - shareCount: number (optional) - Networking metric
+    //   - createdAt: string (required) - ISO 8601 timestamp
+    //
+    // Collection: comments
+    // Path: /papers/{paperId}/comments/{commentId}
+    // Fields:
+    //   - id: string (required)
+    //   - paperId: string (required)
+    //   - userId: string (required)
+    //   - userName: string (required)
+    //   - userSpecialty: string (required)
+    //   - content: string (required)
+    //   - createdAt: string (required)
+    //   - likes: number (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'name', 'email', 'specialty', 'subTopics', 'goal', 'experience', 'country', 'onboardingCompleted', 'readPaperIds', 'savedPaperIds', 'folders', 'notificationSettings', 'impactScore', 'commentCount', 'shareCount', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             isValidEmail(data.email) &&
+             data.specialty is string &&
+             (!('subTopics' in data) || data.subTopics is list) &&
+             (!('goal' in data) || data.goal is string) &&
+             (!('experience' in data) || data.experience is string) &&
+             (!('country' in data) || data.country is string) &&
+             data.onboardingCompleted is bool &&
+             (!('readPaperIds' in data) || data.readPaperIds is list) &&
+             (!('savedPaperIds' in data) || data.savedPaperIds is list) &&
+             (!('folders' in data) || data.folders is list) &&
+             (!('notificationSettings' in data) || data.notificationSettings is map) &&
+             (!('impactScore' in data) || data.impactScore is number) &&
+             (!('commentCount' in data) || data.commentCount is number) &&
+             (!('shareCount' in data) || data.shareCount is number) &&
+             isValidDateString(data.createdAt);
+    }
+
+    function isValidComment(data) {
+      return hasOnlyAllowedFields(['id', 'paperId', 'userId', 'userName', 'userSpecialty', 'content', 'createdAt', 'likes']) &&
+             data.id is string &&
+             data.paperId is string &&
+             data.userId == request.auth.uid &&
+             data.userName is string &&
+             data.userSpecialty is string &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 2000 &&
+             isValidDateString(data.createdAt) &&
+             (!('likes' in data) || data.likes is number);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated(); // Allow others to see profiles for leaderboard/comments
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    match /papers/{paperId}/comments/{commentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidComment(request.resource.data);
+      allow update: if isAuthenticated() && (
+        isOwner(resource.data.userId) && isValidComment(request.resource.data) ||
+        // Allow liking - only 'likes' field changes
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+      );
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
